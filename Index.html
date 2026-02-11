@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ultimate Study Planner</title>
+<meta name="description" content="Plan your daily study schedule by subjects and chapters with progress tracking, calendar view, and confetti celebration.">
+<style>
+body {
+  margin:0;
+  font-family:'Segoe UI', sans-serif;
+  background:#fff;
+  color:#222;
+  text-align:center;
+}
+h1 {
+  margin:20px;
+  font-size:32px;
+}
+input, button {
+  padding:10px;
+  margin:5px;
+  border-radius:8px;
+  border:1px solid #ccc;
+  font-size:16px;
+}
+button {
+  font-weight:bold;
+  border:none;
+  cursor:pointer;
+  background: linear-gradient(145deg,#4facfe,#00f2fe);
+  color:#fff;
+  box-shadow:0 5px 15px rgba(0,162,255,0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+button:hover {
+  transform:translateY(-3px);
+  box-shadow:0 8px 20px rgba(0,162,255,0.5);
+}
+#planner, #calendar {
+  max-width:600px;
+  margin:20px auto;
+  text-align:left;
+}
+.subject-card {
+  background:#f9f9f9;
+  border-radius:12px;
+  padding:15px;
+  margin-bottom:15px;
+  box-shadow:0 5px 15px rgba(0,0,0,0.05);
+}
+.chapter-item {
+  display:flex;
+  align-items:center;
+  margin:6px 0;
+}
+.chapter-item input[type="checkbox"] {
+  width:22px;
+  height:22px;
+  margin-right:10px;
+  accent-color:#4caf50;
+  cursor:pointer;
+  transition: transform 0.2s;
+}
+.chapter-item input[type="checkbox"]:checked {
+  transform:scale(1.2);
+}
+.progress-container {
+  background:#eee;
+  width:90%;
+  height:22px;
+  border-radius:12px;
+  margin:20px auto;
+  overflow:hidden;
+}
+.progress-bar {
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#4facfe,#00f2fe);
+  border-radius:12px;
+  transition: width 0.5s ease;
+  box-shadow:0 0 10px rgba(0,162,255,0.7);
+}
+#congrats {
+  font-size:22px;
+  color:#4caf50;
+  margin:20px 0;
+  display:none;
+}
+#calendar {
+  display:grid;
+  grid-template-columns:repeat(7,1fr);
+  gap:8px;
+  margin-top:20px;
+}
+.calendar-day {
+  padding:12px;
+  border-radius:8px;
+  background:#f1f1f1;
+  cursor:pointer;
+  transition:0.2s;
+  text-align:center;
+  font-weight:bold;
+}
+.calendar-day:hover {
+  transform:translateY(-2px);
+  box-shadow:0 4px 8px rgba(0,0,0,0.1);
+}
+.completed-day {
+  background:#4caf50;
+  color:#fff;
+}
+#subjectInputContainer {
+  margin: 15px 0;
+}
+</style>
+</head>
+<body>
+
+<h1>Ultimate Study Planner</h1>
+
+<div id="setup">
+  <label>Total Days:</label>
+  <input type="number" id="daysLeftInput" min="1" placeholder="30"><br>
+  <label>Number of Subjects:</label>
+  <input type="number" id="subjectCount" min="1" placeholder="3">
+  <button id="addSubjectsBtn">Add Subjects</button>
+</div>
+
+<div id="subjectInputContainer"></div>
+<button id="generateBtn" style="display:none;">Generate Planner</button>
+
+<div id="planner"></div>
+<div id="congrats">🎉 Congrats! You finished today's subjects! 🎉</div>
+
+<div class="progress-container">
+  <div class="progress-bar" id="progressBar"></div>
+</div>
+
+<div id="calendar"></div>
+
+<!-- Confetti canvas -->
+<canvas id="confettiCanvas" style="position:fixed;pointer-events:none;top:0;left:0;width:100%;height:100%;z-index:9999;"></canvas>
+
+<script>
+// Planner Data
+let plannerData = JSON.parse(localStorage.getItem("ultimatePlanner")) || {day:1,daysLeft:0,subjects:[],completed:{},totalChapters:0};
+
+// Dynamic subject input
+document.getElementById("addSubjectsBtn").addEventListener("click", ()=>{
+  let count = parseInt(document.getElementById("subjectCount").value);
+  if(!count || count<1){ alert("Enter valid subject count"); return; }
+  let container = document.getElementById("subjectInputContainer");
+  container.innerHTML="";
+  for(let i=1;i<=count;i++){
+    container.innerHTML+=`<div>
+      <label>Subject ${i} Name:</label>
+      <input type="text" class="subjectName" placeholder="Math"><br>
+      <label>Chapters:</label>
+      <input type="number" class="subjectChapters" min="1" placeholder="10">
+    </div>`;
+  }
+  document.getElementById("generateBtn").style.display="inline-block";
+});
+
+// Generate Planner
+document.getElementById("generateBtn").addEventListener("click", ()=>{
+  let days = parseInt(document.getElementById("daysLeftInput").value);
+  if(!days || days<1){ alert("Enter valid days"); return; }
+  let names = Array.from(document.getElementsByClassName("subjectName")).map(x=>x.value.trim());
+  let chapters = Array.from(document.getElementsByClassName("subjectChapters")).map(x=>parseInt(x.value));
+  if(names.includes("") || chapters.includes(NaN) || chapters.includes(0)){ alert("Enter valid subject names and chapters"); return; }
+  
+  plannerData.daysLeft = days;
+  plannerData.day = 1;
+  plannerData.subjects = names.map((n,i)=>({name:n, totalChapters:chapters[i]}));
+  plannerData.completed = {};
+  plannerData.totalChapters = chapters.reduce((a,b)=>a+b,0);
+  
+  localStorage.setItem("ultimatePlanner", JSON.stringify(plannerData));
+  generateDay();
+});
+
+// Update progress bar
+function updateProgress(){
+  let done = Object.keys(plannerData.completed).length;
+  let total = plannerData.totalChapters;
+  document.getElementById("progressBar").style.width = (done/total*100)+"%";
+}
+
+// Generate daily subjects and chapters
+function generateDay(){
+  let plannerDiv = document.getElementById("planner");
+  plannerDiv.innerHTML="";
+  document.getElementById("congrats").style.display="none";
+  
+  plannerData.subjects.forEach(subj=>{
+    let card = document.createElement("div");
+    card.className="subject-card";
+    card.innerHTML=`<h3>${subj.name}</h3>`;
+    
+    let chaptersPerDay = Math.ceil(subj.totalChapters / plannerData.daysLeft);
+    let start = (plannerData.day-1)*chaptersPerDay +1;
+    let end = Math.min(start+chaptersPerDay-1, subj.totalChapters);
+    
+    for(let c=start;c<=end;c++){
+      let chapterDiv = document.createElement("div");
+      chapterDiv.className="chapter-item";
+      let checkbox = document.createElement("input");
+      checkbox.type="checkbox";
+      checkbox.id=subj.name+"_"+c;
+      checkbox.checked = plannerData.completed[checkbox.id] || false;
+      checkbox.addEventListener("change", ()=>{
+        if(checkbox.checked) plannerData.completed[checkbox.id]=true;
+        else delete plannerData.completed[checkbox.id];
+        localStorage.setItem("ultimatePlanner", JSON.stringify(plannerData));
+        updateProgress();
+        checkDayComplete();
+      });
+      let label = document.createElement("label");
+      label.htmlFor=checkbox.id;
+      label.innerText="Chapter "+c;
+      chapterDiv.appendChild(checkbox);
+      chapterDiv.appendChild(label);
+      card.appendChild(chapterDiv);
+    }
+    plannerDiv.appendChild(card);
+  });
+  updateProgress();
+  renderCalendar();
+}
+
+// Check if day completed
+function checkDayComplete(){
+  let allDone=true;
+  plannerData.subjects.forEach(subj=>{
+    let chaptersPerDay = Math.ceil(subj.totalChapters / plannerData.daysLeft);
+    let start = (plannerData.day-1)*chaptersPerDay +1;
+    let end = Math.min(start+chaptersPerDay-1, subj.totalChapters);
+    for(let c=start;c<=end;c++){
+      if(!plannerData.completed[subj.name+"_"+c]) allDone=false;
+    }
+  });
+  if(allDone){
+    showCongratsPopup();
+    plannerData.day++;
+    plannerData.daysLeft = Math.max(plannerData.daysLeft-1,1);
+    localStorage.setItem("ultimatePlanner", JSON.stringify(plannerData));
+    setTimeout(generateDay,2000);
+  }
+}
+
+// Calendar rendering
+function renderCalendar(){
+  let cal = document.getElementById("calendar");
+  cal.innerHTML="";
+  for(let d=1;d<=plannerData.subjects.length*plannerData.daysLeft;d++){
+    let dayBox = document.createElement("div");
+    dayBox.className="calendar-day";
+    dayBox.innerText="Day "+d;
+    if(d<plannerData.day) dayBox.classList.add("completed-day");
+    dayBox.addEventListener("click", ()=>{
+      plannerData.day=d;
+      generateDay();
+    });
+    cal.appendChild(dayBox);
+  }
+}
+
+// Confetti popup
+function showCongratsPopup(){
+  document.getElementById("congrats").style.display="block";
+  let canvas = document.getElementById("confettiCanvas");
+  let ctx = canvas.getContext("2d");
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  let pieces=[];
+  for(let i=0;i<150;i++){
+    pieces.push({x:Math.random()*canvas.width,y:Math.random()*canvas.height,dx:(Math.random()-0.5)*5,dy:Math.random()*-5-2,r:Math.random()*6+4,color:`hsl(${Math.random()*360},100%,50%)`});
+  }
+  let interval = setInterval(()=>{
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    pieces.forEach(p=>{
+      p.x+=p.dx; p.y+=p.dy+0.5;
+      p.dy+=0.1;
+      ctx.fillStyle=p.color;
+      ctx.beginPath();
+      ctx.arc(p.x,p.y,p.r,0,Math.PI*2);
+      ctx.fill();
+      if(p.y>canvas.height) p.y=0;
+    });
+  },16);
+  setTimeout(()=>{ clearInterval(interval); ctx.clearRect(0,0,canvas.width,canvas.height); },3000);
+}
+
+if(plannerData.subjects.length>0) generateDay();
+</script>
+
+</body>
+</html>
